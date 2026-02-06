@@ -1,289 +1,213 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <title>WebChat Ultra Pro</title>
+    <title>WebChat Account Edition</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <style>
-        :root { --primary-color: #007AFF; --self-bg: #95ec69; --sidebar-bg: #2e3b4e; --bg-color: #f2f2f2; }
-        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
-        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; height: 100dvh; display: flex; background-color: var(--bg-color); overflow: hidden; }
+        :root { --primary-color: #007AFF; --bg-color: #f2f2f2; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; font-family: -apple-system, sans-serif; height: 100dvh; display: flex; background-color: var(--bg-color); overflow: hidden; }
 
-        /* 侧边栏 & 头部 */
-        #sidebar { width: 260px; background-color: var(--sidebar-bg); color: #ecf0f1; display: flex; flex-direction: column; transition: transform 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); box-shadow: 2px 0 10px rgba(0,0,0,0.1); z-index: 2; }
-        .sidebar-header { padding: 20px; font-size: 1.2rem; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.1); cursor: pointer; }
-        #user-list { list-style: none; padding: 10px; margin: 0; overflow-y: auto; flex: 1; }
-        .user-item { padding: 10px; margin-bottom: 5px; display: flex; align-items: center; border-radius: 8px; }
-        .user-avatar-sm { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: white; margin-right: 12px; font-size: 14px; flex-shrink: 0; }
-        
-        #main { flex: 1; display: flex; flex-direction: column; position: relative; background-color: #f5f5f5; width: 100%; }
-        .chat-header { height: 60px; background: white; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; padding: 0 20px; justify-content: space-between; flex-shrink: 0; }
-        
-        /* 消息区域 */
-        #messages { flex: 1; list-style-type: none; margin: 0; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
-        .message-row { display: flex; align-items: flex-end; max-width: 80%; opacity: 0; animation: fadeIn 0.3s forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .avatar { width: 40px; height: 40px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 1.1rem; flex-shrink: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .bubble-container { display: flex; flex-direction: column; margin: 0 12px; }
-        .bubble-meta { font-size: 0.75rem; color: #999; margin-bottom: 4px; display: flex; gap: 8px; }
-        .bubble { padding: 10px 16px; border-radius: 6px; font-size: 1rem; line-height: 1.5; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.08); word-wrap: break-word; max-width: 100%; background: white; }
-        
-        /* 图片消息样式 */
-        .bubble img { max-width: 200px; max-height: 200px; border-radius: 4px; display: block; cursor: pointer; }
+        /* === 登录界面样式 === */
+        #auth-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
+        #auth-box { background: white; padding: 30px; border-radius: 16px; width: 320px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); text-align: center; }
+        #auth-box h2 { margin-top: 0; color: #333; }
+        .auth-input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
+        .auth-btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 5px; }
+        .btn-primary { background: var(--primary-color); color: white; }
+        .btn-secondary { background: transparent; color: var(--primary-color); margin-top: 10px; }
+        #auth-error { color: red; font-size: 14px; margin-top: 10px; min-height: 20px; }
 
-        .left { align-self: flex-start; }
-        .left .bubble::before { content: ""; position: absolute; left: -6px; top: 14px; width: 0; height: 0; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-right: 6px solid white; }
+        /* === 聊天界面样式 (复用之前的) === */
+        #main-app { display: none; width: 100%; height: 100%; display: flex; } /* 默认隐藏，登录后显示 */
+        #sidebar { width: 260px; background: #2e3b4e; color: white; display: flex; flex-direction: column; }
+        #main { flex: 1; display: flex; flex-direction: column; background: #f5f5f5; width: 100%; }
+        
+        #messages { flex: 1; list-style: none; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
+        .message-row { display: flex; align-items: flex-end; max-width: 80%; }
         .right { align-self: flex-end; flex-direction: row-reverse; }
-        .right .bubble-container { align-items: flex-end; }
-        .right .bubble { background: var(--self-bg); color: black; }
-        .right .bubble::before { content: ""; position: absolute; right: -6px; top: 14px; width: 0; height: 0; border-top: 6px solid transparent; border-bottom: 6px solid transparent; border-left: 6px solid var(--self-bg); }
-        .system-message { align-self: center; background: rgba(0,0,0,0.1); padding: 4px 12px; border-radius: 100px; font-size: 0.75rem; color: #666; margin: 10px 0; }
-
-        /* 底部工具栏 */
-        #typing-bar { height: 24px; padding: 0 20px; font-size: 0.8rem; color: #888; display: flex; align-items: center; font-style: italic; opacity: 0; transition: opacity 0.3s; flex-shrink: 0; }
-        #input-area { background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); padding: 10px 15px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid rgba(0,0,0,0.05); display: flex; gap: 8px; align-items: center; flex-shrink: 0; position: relative; }
+        .left { align-self: flex-start; }
+        .bubble { padding: 10px 15px; border-radius: 8px; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.1); word-break: break-all; }
+        .right .bubble { background: #95ec69; }
+        .bubble img { max-width: 150px; border-radius: 4px; }
         
-        /* 按钮样式 */
-        .tool-btn { background: none; border: none; font-size: 1.5rem; cursor: pointer; padding: 0 5px; color: #555; transition: color 0.2s; }
-        .tool-btn:hover { color: var(--primary-color); }
-        #input { flex: 1; border: 1px solid #ddd; padding: 10px 15px; border-radius: 4px; font-size: 16px; transition: all 0.2s; background: white; }
-        #input:focus { border-color: var(--primary-color); }
-        .send-btn { background: var(--primary-color); color: white; border: none; padding: 0 15px; height: 40px; border-radius: 4px; font-weight: 600; cursor: pointer; flex-shrink: 0; }
+        #input-area { background: white; padding: 10px; display: flex; gap: 10px; border-top: 1px solid #ddd; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+        #input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+        button { padding: 0 15px; background: var(--primary-color); color: white; border: none; border-radius: 4px; }
 
-        /* 表情选择器 */
-        #emoji-picker { position: absolute; bottom: 70px; left: 10px; background: white; border: 1px solid #ddd; border-radius: 8px; padding: 10px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); display: none; z-index: 10; max-width: 300px; }
-        #emoji-picker.show { display: grid; }
-        .emoji-item { font-size: 1.5rem; cursor: pointer; text-align: center; padding: 5px; border-radius: 4px; }
-        .emoji-item:hover { background-color: #f0f0f0; }
-
-        /* 更新日志模态框 */
-        #modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 100; display: none; align-items: center; justify-content: center; }
-        #log-modal { background: white; padding: 25px; border-radius: 12px; max-width: 90%; width: 400px; max-height: 80vh; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
-        .log-title { font-size: 1.2rem; font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
-        .log-entry { margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
-        .log-date { font-size: 0.8rem; color: #888; margin-bottom: 5px; }
-        .log-content li { margin-bottom: 5px; font-size: 0.95rem; }
-        .close-btn { cursor: pointer; color: #999; font-size: 1.5rem; }
-
-        @media (max-width: 700px) {
-            #sidebar { position: absolute; height: 100%; transform: translateX(-100%); width: 80%; }
-            #sidebar.open { transform: translateX(0); }
-            .menu-btn { display: block; cursor: pointer; margin-right: 15px; font-size: 1.5rem; color: #555; }
+        @media (max-width: 700px) { 
+            #sidebar { display: none; } 
+            #main-app { display: none; } /* 初始隐藏 */
         }
-        .menu-btn { display: none; }
     </style>
 </head>
 <body>
 
-    <div id="modal-overlay">
-        <div id="log-modal">
-            <div class="log-title">
-                更新日志 🚀
-                <span class="close-btn" onclick="toggleLog()">×</span>
-            </div>
-            <div id="log-list">
-                </div>
-        </div>
-    </div>
-
-    <div id="sidebar">
-        <div class="sidebar-header" onclick="toggleLog()">
-            <div style="display: flex; align-items: center; gap:10px;">
-                <div style="width:10px; height:10px; background:#2ecc71; border-radius:50%;"></div>
-                WebChat V2.0
-            </div>
-            <span style="font-size:0.8rem; color:#aaa; margin-top:5px; display:block;">点击查看更新日志</span>
-        </div>
-        <ul id="user-list"></ul>
-    </div>
-
-    <div id="main">
-        <div class="chat-header">
-            <div style="display: flex; align-items: center;">
-                <div class="menu-btn" onclick="toggleSidebar()">☰</div>
-                <span style="font-weight: bold;">公共聊天室</span>
-            </div>
-            <div style="font-size: 0.9rem; color: #888;">在线: <span id="user-count">0</span></div>
-        </div>
-
-        <ul id="messages"></ul>
-        <div id="typing-bar"></div>
-
-        <div id="emoji-picker"></div>
-
-        <form id="input-area">
-            <input type="file" id="file-input" accept="image/*" style="display: none;" />
-            <button type="button" class="tool-btn" onclick="document.getElementById('file-input').click()">🖼️</button>
+    <div id="auth-overlay">
+        <div id="auth-box">
+            <h2 id="auth-title">欢迎回来 👋</h2>
+            <input id="auth-user" class="auth-input" placeholder="账号 / 昵称" autocomplete="off">
+            <input id="auth-pass" class="auth-input" type="password" placeholder="密码">
+            <div id="auth-error"></div>
             
-            <button type="button" class="tool-btn" onclick="toggleEmoji()">😀</button>
+            <button class="auth-btn btn-primary" onclick="doLogin()">登 录</button>
+            <button class="auth-btn btn-secondary" onclick="switchMode()">没有账号？去注册</button>
+        </div>
+    </div>
 
-            <input id="input" autocomplete="off" placeholder="发消息 (支持粘贴截图)..." />
-            <button class="send-btn">发送</button>
-        </form>
+    <div id="main-app" style="display: none;"> <div id="sidebar">
+            <div style="padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">WebChat 在线列表</div>
+            <ul id="user-list" style="padding: 10px; list-style: none;"></ul>
+        </div>
+
+        <div id="main">
+            <div style="height: 50px; background: white; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid #ddd;">
+                <span id="header-title">聊天室</span>
+                <button onclick="doLogout()" style="margin-left: auto; background: #e74c3c; font-size: 0.8rem;">退出</button>
+            </div>
+            
+            <ul id="messages"></ul>
+
+            <form id="input-area">
+                <input type="file" id="file-input" accept="image/*" style="display: none;">
+                <button type="button" onclick="document.getElementById('file-input').click()" style="background:none; color:#555; font-size:1.2rem;">🖼️</button>
+                <input id="input" placeholder="说点什么..." autocomplete="off">
+                <button>发送</button>
+            </form>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        // --- 1. 配置数据 ---
-        const changeLogs = [
-            { version: "v2.0", date: "2024-02-06", content: ["新增：发送图片功能 (支持文件上传和粘贴)", "新增：表情包面板", "优化：手机端适配", "新增：更新日志查看"] },
-            { version: "v1.5", date: "2024-02-05", content: ["新增：消息数据库持久化 (SQLite)", "新增：正在输入提示"] },
-            { version: "v1.0", date: "2024-02-04", content: ["基础聊天功能上线", "在线用户列表"] }
-        ];
-
-        // --- 2. 基础逻辑 ---
         var socket = io();
-        var myName = prompt("请输入你的昵称：") || "路人甲" + Math.floor(Math.random()*100);
-        socket.emit('join', myName);
+        var isRegisterMode = false;
+        var myName = "";
 
-        const messages = document.getElementById('messages');
-        const input = document.getElementById('input');
-        const fileInput = document.getElementById('file-input');
+        // === 登录/注册 逻辑 ===
         
-        // --- 3. 发送消息逻辑 ---
-        document.getElementById('input-area').addEventListener('submit', function(e) {
-            e.preventDefault();
-            if (input.value.trim()) {
-                // 发送文本类型消息
-                socket.emit('chat message', { msg: input.value, type: 'text' });
-                socket.emit('stop typing');
-                input.value = '';
-                input.focus();
+        // 1. 检查本地是否有保存的登录状态
+        window.onload = function() {
+            const savedUser = localStorage.getItem('chatUser');
+            if (savedUser) {
+                document.getElementById('auth-user').value = savedUser;
             }
-        });
+        };
 
-        // --- 4. 图片处理 (上传 & 粘贴) ---
-        // A. 监听文件选择
-        fileInput.addEventListener('change', function() {
-            const file = this.files[0];
-            if (file) sendImage(file);
-            this.value = ''; // 重置，允许重复选同一张
-        });
-
-        // B. 监听 Ctrl+V 粘贴
-        input.addEventListener('paste', function(e) {
-            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
-            for (let item of items) {
-                if (item.kind === 'file' && item.type.indexOf('image/') !== -1) {
-                    const blob = item.getAsFile();
-                    sendImage(blob);
-                }
+        function switchMode() {
+            isRegisterMode = !isRegisterMode;
+            const title = document.getElementById('auth-title');
+            const primaryBtn = document.querySelector('.btn-primary');
+            const secondaryBtn = document.querySelector('.btn-secondary');
+            
+            if (isRegisterMode) {
+                title.textContent = "创建新账号 🚀";
+                primaryBtn.textContent = "注 册";
+                primaryBtn.onclick = doRegister;
+                secondaryBtn.textContent = "已有账号？去登录";
+            } else {
+                title.textContent = "欢迎回来 👋";
+                primaryBtn.textContent = "登 录";
+                primaryBtn.onclick = doLogin;
+                secondaryBtn.textContent = "没有账号？去注册";
             }
-        });
-
-        // C. 发送图片核心函数 (转 Base64)
-        function sendImage(file) {
-            if (file.size > 5 * 1024 * 1024) { alert("图片太大啦 (超过5MB)，请压缩后再发！"); return; }
-            const reader = new FileReader();
-            reader.onload = function(evt) {
-                // 发送图片类型消息
-                socket.emit('chat message', { msg: evt.target.result, type: 'image' });
-            };
-            reader.readAsDataURL(file);
+            document.getElementById('auth-error').textContent = "";
         }
 
-        // --- 5. 接收消息渲染 ---
-        socket.on('chat message', function(data) {
-            const isMe = data.id === socket.id;
-            const li = document.createElement('li');
-            li.className = `message-row ${isMe ? 'right' : 'left'}`;
-            const color = stringToColor(data.user);
-            
-            // 判断是文本还是图片
-            let contentHtml = '';
-            if (data.type === 'image') {
-                contentHtml = `<img src="${data.text}" onclick="window.open(this.src)" />`;
+        function doRegister() {
+            const u = document.getElementById('auth-user').value.trim();
+            const p = document.getElementById('auth-pass').value.trim();
+            if(!u || !p) return showErr("账号密码不能为空");
+            socket.emit('register', { username: u, password: p });
+        }
+
+        function doLogin() {
+            const u = document.getElementById('auth-user').value.trim();
+            const p = document.getElementById('auth-pass').value.trim();
+            if(!u || !p) return showErr("账号密码不能为空");
+            socket.emit('login', { username: u, password: p });
+        }
+
+        function doLogout() {
+            localStorage.removeItem('chatUser');
+            location.reload();
+        }
+
+        function showErr(msg) {
+            document.getElementById('auth-error').textContent = msg;
+        }
+
+        // === Socket 反馈处理 ===
+        
+        socket.on('register_response', (res) => {
+            if (res.success) {
+                alert(res.msg);
+                switchMode(); // 注册成功，切换回登录界面
             } else {
-                contentHtml = data.text; // 普通文本
+                showErr(res.msg);
             }
+        });
+
+        socket.on('login_response', (res) => {
+            if (res.success) {
+                // 登录成功！
+                myName = res.username;
+                localStorage.setItem('chatUser', myName); // 记住账号
+                
+                // 隐藏登录框，显示聊天界面
+                document.getElementById('auth-overlay').style.display = 'none';
+                document.getElementById('main-app').style.display = 'flex';
+                document.getElementById('header-title').textContent = `聊天室 (${myName})`;
+            } else {
+                showErr(res.msg);
+            }
+        });
+
+        // === 聊天逻辑 (精简版) ===
+        
+        const messages = document.getElementById('messages');
+        const input = document.getElementById('input');
+
+        document.getElementById('input-area').addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (input.value) {
+                socket.emit('chat message', input.value);
+                input.value = '';
+            }
+        });
+
+        // 图片处理
+        document.getElementById('file-input').addEventListener('change', function() {
+            const file = this.files[0];
+            if(file) {
+                const reader = new FileReader();
+                reader.onload = (e) => socket.emit('chat message', { msg: e.target.result, type: 'image' });
+                reader.readAsDataURL(file);
+                this.value = '';
+            }
+        });
+
+        socket.on('chat message', (data) => {
+            const li = document.createElement('li');
+            li.className = `message-row ${data.user === myName ? 'right' : 'left'}`;
+            
+            let content = data.type === 'image' 
+                ? `<img src="${data.text}" onclick="window.open(this.src)">` 
+                : data.text;
 
             li.innerHTML = `
-                <div class="avatar" style="background-color: ${color}">${getAvatarText(data.user)}</div>
-                <div class="bubble-container">
-                    <div class="bubble-meta">
-                        ${!isMe ? `<span style="font-weight:bold">${data.user}</span>` : ''} 
-                        <span>${data.time}</span>
-                    </div>
-                    <div class="bubble">${contentHtml}</div>
+                <div style="display:flex; flex-direction:column; margin:0 10px;">
+                    <span style="font-size:0.7rem; color:#999; margin-bottom:2px;">${data.user}</span>
+                    <div class="bubble">${content}</div>
                 </div>
             `;
             messages.appendChild(li);
-            requestAnimationFrame(() => messages.scrollTop = messages.scrollHeight);
+            messages.scrollTop = messages.scrollHeight;
         });
-
-        // --- 6. 表情包逻辑 ---
-        const emojis = ["😀","😂","🤣","😍","🥰","😎","😭","😡","👍","👎","🎉","🔥","❤️","💔","💩","👻","💀","👽","🤖","🐱","🐶","🙈","🙉","🙊"];
-        const picker = document.getElementById('emoji-picker');
         
-        // 生成表情按钮
-        emojis.forEach(emoji => {
-            const span = document.createElement('span');
-            span.className = 'emoji-item';
-            span.textContent = emoji;
-            span.onclick = () => {
-                input.value += emoji;
-                input.focus();
-                picker.classList.remove('show');
-            };
-            picker.appendChild(span);
-        });
-
-        function toggleEmoji() { picker.classList.toggle('show'); }
-
-        // --- 7. 更新日志逻辑 ---
-        function toggleLog() {
-            const modal = document.getElementById('modal-overlay');
-            modal.style.display = (modal.style.display === 'flex') ? 'none' : 'flex';
-        }
-        
-        // 渲染日志
-        const logList = document.getElementById('log-list');
-        changeLogs.forEach(log => {
-            const div = document.createElement('div');
-            div.className = 'log-entry';
-            div.innerHTML = `
-                <div class="log-date">${log.version} · ${log.date}</div>
-                <ul class="log-content" style="padding-left: 20px; margin: 0;">
-                    ${log.content.map(c => `<li>${c}</li>`).join('')}
-                </ul>
-            `;
-            logList.appendChild(div);
-        });
-
-        // --- 8. 辅助函数 (颜色、侧边栏等) ---
-        function stringToColor(str) {
-            var hash = 0;
-            for (var i = 0; i < str.length; i++) { hash = str.charCodeAt(i) + ((hash << 5) - hash); }
-            var c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
-            return '#' + "00000".substring(0, 6 - c.length) + c;
-        }
-        function getAvatarText(name) { return name ? name.charAt(0).toUpperCase() : "?"; }
-        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
-        
-        // Socket 其他监听
-        socket.on('system', (msg) => {
-            const li = document.createElement('li');
-            li.className = 'system-message';
-            li.textContent = msg;
-            messages.appendChild(li);
-        });
         socket.on('update user list', (users) => {
-            document.getElementById('user-count').textContent = users.length;
             const ul = document.getElementById('user-list');
-            ul.innerHTML = '';
-            users.forEach(u => {
-                const li = document.createElement('li');
-                li.className = 'user-item';
-                li.innerHTML = `<div class="user-avatar-sm" style="background:${stringToColor(u)}">${getAvatarText(u)}</div><div class="user-name">${u}</div>`;
-                ul.appendChild(li);
-            });
-        });
-        
-        // 点击页面其他地方关闭表情框
-        document.addEventListener('click', (e) => {
-            if (!e.target.closest('#emoji-picker') && !e.target.closest('.tool-btn')) {
-                picker.classList.remove('show');
-            }
+            ul.innerHTML = users.map(u => `<li>${u}</li>`).join('');
         });
     </script>
 </body>
