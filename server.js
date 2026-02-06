@@ -133,9 +133,7 @@ setInterval(() => {
     const ramUsed = Math.round(memoryUsage.rss / 1024 / 1024); 
     const connections = Object.keys(onlineUsers).length; 
 
-    console.log(`[系统监控] 内存占用: ${ramUsed} MB | 在线用户: ${connections}`);
-    
-    if (ramUsed > 400) {
-        console.warn("⚠️⚠️⚠️ 警告：内存即将耗尽！服务器可能即将崩溃！");
-    }
-}, 1000); // <--- 这里已改为 1000 (每秒刷新)
+    // 只在控制台输出，不再刷屏
+    // 改为 60000 (30秒) 甚至 60000 (1分钟)
+    console.log(`[系统监控] 内存: ${ramUsed} MB | 在线: ${connections}`);
+}, 30000);
