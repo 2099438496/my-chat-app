@@ -1,79 +1,137 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <title>WebChat Account Edition</title>
+    <title>WebChat Ultimate</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <style>
-        :root { --primary-color: #007AFF; --bg-color: #f2f2f2; }
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        :root { --primary-color: #007AFF; --self-bg: #95ec69; --bg-color: #f2f2f2; --sidebar-bg: #2e3b4e; }
+        * { box-sizing: border-box; outline: none; -webkit-tap-highlight-color: transparent; }
         body { margin: 0; font-family: -apple-system, sans-serif; height: 100dvh; display: flex; background-color: var(--bg-color); overflow: hidden; }
 
-        /* === 登录界面样式 === */
+        /* === 1. 登录层样式 === */
         #auth-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); z-index: 999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
         #auth-box { background: white; padding: 30px; border-radius: 16px; width: 320px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); text-align: center; }
-        #auth-box h2 { margin-top: 0; color: #333; }
         .auth-input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 16px; }
         .auth-btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 5px; }
         .btn-primary { background: var(--primary-color); color: white; }
         .btn-secondary { background: transparent; color: var(--primary-color); margin-top: 10px; }
         #auth-error { color: red; font-size: 14px; margin-top: 10px; min-height: 20px; }
 
-        /* === 聊天界面样式 (复用之前的) === */
-        #main-app { display: none; width: 100%; height: 100%; display: flex; } /* 默认隐藏，登录后显示 */
-        #sidebar { width: 260px; background: #2e3b4e; color: white; display: flex; flex-direction: column; }
-        #main { flex: 1; display: flex; flex-direction: column; background: #f5f5f5; width: 100%; }
-        
-        #messages { flex: 1; list-style: none; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; }
-        .message-row { display: flex; align-items: flex-end; max-width: 80%; }
-        .right { align-self: flex-end; flex-direction: row-reverse; }
-        .left { align-self: flex-start; }
-        .bubble { padding: 10px 15px; border-radius: 8px; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.1); word-break: break-all; }
-        .right .bubble { background: #95ec69; }
-        .bubble img { max-width: 150px; border-radius: 4px; }
-        
-        #input-area { background: white; padding: 10px; display: flex; gap: 10px; border-top: 1px solid #ddd; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
-        #input { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
-        button { padding: 0 15px; background: var(--primary-color); color: white; border: none; border-radius: 4px; }
+        /* === 2. 主界面结构 === */
+        #main-app { display: none; width: 100%; height: 100%; display: flex; } /* 登录后显示 */
+        #sidebar { width: 260px; background-color: var(--sidebar-bg); color: #ecf0f1; display: flex; flex-direction: column; transition: 0.3s; z-index: 2; }
+        #main { flex: 1; display: flex; flex-direction: column; background: #f5f5f5; width: 100%; position: relative; }
 
-        @media (max-width: 700px) { 
-            #sidebar { display: none; } 
-            #main-app { display: none; } /* 初始隐藏 */
+        /* 侧边栏 */
+        .sidebar-header { padding: 20px; font-weight: bold; border-bottom: 1px solid rgba(255,255,255,0.1); background: rgba(0,0,0,0.1); cursor: pointer; }
+        #user-list { list-style: none; padding: 10px; margin: 0; overflow-y: auto; flex: 1; }
+        .user-item { padding: 8px; display: flex; align-items: center; font-size: 0.9rem; }
+        .user-avatar-sm { width: 28px; height: 28px; border-radius: 50%; margin-right: 10px; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; }
+
+        /* 聊天头部 */
+        .chat-header { height: 50px; background: white; border-bottom: 1px solid #ddd; display: flex; align-items: center; padding: 0 15px; justify-content: space-between; flex-shrink: 0; }
+        .menu-btn { display: none; font-size: 1.5rem; margin-right: 15px; color: #555; cursor: pointer; }
+
+        /* 消息列表 */
+        #messages { flex: 1; list-style: none; margin: 0; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+        .message-row { display: flex; align-items: flex-end; max-width: 85%; }
+        .message-row.right { align-self: flex-end; flex-direction: row-reverse; }
+        .message-row.left { align-self: flex-start; }
+        
+        .avatar { width: 36px; height: 36px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; flex-shrink: 0; font-size: 14px; }
+        
+        .bubble-container { margin: 0 10px; display: flex; flex-direction: column; }
+        .bubble-meta { font-size: 12px; color: #999; margin-bottom: 3px; }
+        .right .bubble-meta { text-align: right; }
+
+        .bubble { padding: 10px 14px; border-radius: 8px; font-size: 15px; line-height: 1.4; word-break: break-all; position: relative; box-shadow: 0 1px 2px rgba(0,0,0,0.1); background: white; }
+        .right .bubble { background: var(--self-bg); }
+        .bubble img { max-width: 100%; max-height: 200px; border-radius: 4px; display: block; cursor: pointer; }
+        .system-message { align-self: center; background: rgba(0,0,0,0.1); padding: 3px 10px; border-radius: 20px; font-size: 12px; color: #666; }
+
+        /* 底部工具栏 */
+        #typing-bar { height: 20px; padding: 0 15px; font-size: 12px; color: #999; font-style: italic; opacity: 0; transition: 0.3s; flex-shrink: 0; }
+        #input-area { background: #f9f9f9; padding: 8px 10px; padding-bottom: calc(8px + env(safe-area-inset-bottom)); border-top: 1px solid #ddd; display: flex; gap: 8px; align-items: center; flex-shrink: 0; position: relative; }
+        
+        .tool-btn { font-size: 1.4rem; cursor: pointer; background: none; border: none; padding: 0 5px; color: #666; }
+        #input { flex: 1; border: 1px solid #ddd; padding: 9px 12px; border-radius: 4px; font-size: 16px; background: white; }
+        .send-btn { background: var(--primary-color); color: white; border: none; padding: 0 15px; height: 38px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+
+        /* === 3. 表情面板 === */
+        #emoji-picker { position: absolute; bottom: 60px; left: 10px; background: white; border: 1px solid #ddd; border-radius: 8px; padding: 10px; display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); display: none; z-index: 10; max-width: 300px; }
+        #emoji-picker.show { display: grid; }
+        .emoji-item { font-size: 1.4rem; cursor: pointer; text-align: center; padding: 5px; }
+        .emoji-item:hover { background: #eee; border-radius: 4px; }
+
+        /* === 4. 更新日志模态框 === */
+        #modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: none; align-items: center; justify-content: center; }
+        #log-modal { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px; max-height: 70vh; overflow-y: auto; }
+        .log-entry { border-bottom: 1px solid #eee; padding-bottom: 10px; margin-bottom: 10px; }
+        .log-ver { font-weight: bold; color: var(--primary-color); display: flex; justify-content: space-between; }
+        .log-date { font-size: 0.8rem; color: #999; }
+        .log-list { margin: 5px 0 0 20px; padding: 0; font-size: 0.9rem; color: #333; }
+
+        /* 移动端适配 */
+        @media (max-width: 700px) {
+            #sidebar { position: absolute; height: 100%; transform: translateX(-100%); width: 75%; box-shadow: 2px 0 10px rgba(0,0,0,0.2); }
+            #sidebar.open { transform: translateX(0); }
+            .menu-btn { display: block; }
         }
     </style>
 </head>
 <body>
 
+    <div id="modal-overlay" onclick="toggleLog()">
+        <div id="log-modal" onclick="event.stopPropagation()">
+            <h3 style="margin-top:0;">系统更新日志 🚀</h3>
+            <div id="log-content"></div>
+            <button onclick="toggleLog()" style="width:100%; padding:10px; background:#eee; border:none; border-radius:6px; margin-top:10px;">关 闭</button>
+        </div>
+    </div>
+
     <div id="auth-overlay">
         <div id="auth-box">
-            <h2 id="auth-title">欢迎回来 👋</h2>
-            <input id="auth-user" class="auth-input" placeholder="账号 / 昵称" autocomplete="off">
+            <h2 id="auth-title">欢迎回来</h2>
+            <input id="auth-user" class="auth-input" placeholder="账号" autocomplete="off">
             <input id="auth-pass" class="auth-input" type="password" placeholder="密码">
             <div id="auth-error"></div>
-            
             <button class="auth-btn btn-primary" onclick="doLogin()">登 录</button>
             <button class="auth-btn btn-secondary" onclick="switchMode()">没有账号？去注册</button>
         </div>
     </div>
 
-    <div id="main-app" style="display: none;"> <div id="sidebar">
-            <div style="padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1);">WebChat 在线列表</div>
-            <ul id="user-list" style="padding: 10px; list-style: none;"></ul>
+    <div id="main-app">
+        <div id="sidebar">
+            <div class="sidebar-header" onclick="toggleLog()">
+                WebChat V2.2
+                <div style="font-size:12px; color:#aaa; font-weight:normal; margin-top:5px;">点击查看更新日志</div>
+            </div>
+            <ul id="user-list"></ul>
         </div>
 
         <div id="main">
-            <div style="height: 50px; background: white; display: flex; align-items: center; padding: 0 20px; border-bottom: 1px solid #ddd;">
-                <span id="header-title">聊天室</span>
-                <button onclick="doLogout()" style="margin-left: auto; background: #e74c3c; font-size: 0.8rem;">退出</button>
+            <div class="chat-header">
+                <div style="display:flex; align-items:center;">
+                    <div class="menu-btn" onclick="toggleSidebar()">☰</div>
+                    <span id="header-title">聊天室</span>
+                </div>
+                <button onclick="doLogout()" style="background:#e74c3c; color:white; border:none; padding:5px 10px; border-radius:4px; font-size:12px;">退出</button>
             </div>
-            
+
             <ul id="messages"></ul>
+            <div id="typing-bar"></div>
+
+            <div id="emoji-picker"></div>
 
             <form id="input-area">
-                <input type="file" id="file-input" accept="image/*" style="display: none;">
-                <button type="button" onclick="document.getElementById('file-input').click()" style="background:none; color:#555; font-size:1.2rem;">🖼️</button>
-                <input id="input" placeholder="说点什么..." autocomplete="off">
-                <button>发送</button>
+                <input type="file" id="file-input" accept="image/*" style="display: none;" />
+                
+                <button type="button" class="tool-btn" onclick="document.getElementById('file-input').click()">🖼️</button>
+                <button type="button" class="tool-btn" onclick="toggleEmoji()">😀</button>
+
+                <input id="input" autocomplete="off" placeholder="发消息..." />
+                <button class="send-btn">发送</button>
             </form>
         </div>
     </div>
@@ -81,51 +139,36 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         var socket = io();
-        var isRegisterMode = false;
         var myName = "";
+        var isRegister = false;
 
-        // === 登录/注册 逻辑 ===
-        
-        // 1. 检查本地是否有保存的登录状态
-        window.onload = function() {
-            const savedUser = localStorage.getItem('chatUser');
-            if (savedUser) {
-                document.getElementById('auth-user').value = savedUser;
-            }
+        // --- 配置: 更新日志 ---
+        const logs = [
+            { v: "V2.2", d: "2024-02-06", i: ["新增：账户登录/注册系统", "优化：合并所有功能到稳定版"] },
+            { v: "V2.0", d: "2024-02-06", i: ["新增：图片发送 (支持粘贴/上传)", "新增：表情包面板"] },
+            { v: "V1.0", d: "2024-02-05", i: ["基础聊天功能", "在线列表", "手机适配"] }
+        ];
+
+        // --- 1. 登录/注册逻辑 ---
+        window.onload = () => {
+            const u = localStorage.getItem('chatUser');
+            if(u) document.getElementById('auth-user').value = u;
+            renderLogs(); // 渲染日志
         };
 
         function switchMode() {
-            isRegisterMode = !isRegisterMode;
-            const title = document.getElementById('auth-title');
-            const primaryBtn = document.querySelector('.btn-primary');
-            const secondaryBtn = document.querySelector('.btn-secondary');
-            
-            if (isRegisterMode) {
-                title.textContent = "创建新账号 🚀";
-                primaryBtn.textContent = "注 册";
-                primaryBtn.onclick = doRegister;
-                secondaryBtn.textContent = "已有账号？去登录";
-            } else {
-                title.textContent = "欢迎回来 👋";
-                primaryBtn.textContent = "登 录";
-                primaryBtn.onclick = doLogin;
-                secondaryBtn.textContent = "没有账号？去注册";
-            }
+            isRegister = !isRegister;
+            document.getElementById('auth-title').textContent = isRegister ? "注册新账号" : "欢迎回来";
+            document.querySelector('.btn-primary').textContent = isRegister ? "注 册" : "登 录";
+            document.querySelector('.btn-secondary').textContent = isRegister ? "去登录" : "去注册";
             document.getElementById('auth-error').textContent = "";
-        }
-
-        function doRegister() {
-            const u = document.getElementById('auth-user').value.trim();
-            const p = document.getElementById('auth-pass').value.trim();
-            if(!u || !p) return showErr("账号密码不能为空");
-            socket.emit('register', { username: u, password: p });
         }
 
         function doLogin() {
             const u = document.getElementById('auth-user').value.trim();
             const p = document.getElementById('auth-pass').value.trim();
-            if(!u || !p) return showErr("账号密码不能为空");
-            socket.emit('login', { username: u, password: p });
+            if(!u || !p) return showErr("请输入账号和密码");
+            socket.emit(isRegister ? 'register' : 'login', { username: u, password: p });
         }
 
         function doLogout() {
@@ -133,81 +176,145 @@
             location.reload();
         }
 
-        function showErr(msg) {
-            document.getElementById('auth-error').textContent = msg;
-        }
+        function showErr(msg) { document.getElementById('auth-error').textContent = msg; }
 
-        // === Socket 反馈处理 ===
-        
-        socket.on('register_response', (res) => {
-            if (res.success) {
-                alert(res.msg);
-                switchMode(); // 注册成功，切换回登录界面
-            } else {
-                showErr(res.msg);
-            }
+        socket.on('register_response', res => {
+            if(res.success) { alert(res.msg); switchMode(); } else showErr(res.msg);
         });
 
-        socket.on('login_response', (res) => {
-            if (res.success) {
-                // 登录成功！
+        socket.on('login_response', res => {
+            if(res.success) {
                 myName = res.username;
-                localStorage.setItem('chatUser', myName); // 记住账号
-                
-                // 隐藏登录框，显示聊天界面
+                localStorage.setItem('chatUser', myName);
                 document.getElementById('auth-overlay').style.display = 'none';
                 document.getElementById('main-app').style.display = 'flex';
                 document.getElementById('header-title').textContent = `聊天室 (${myName})`;
-            } else {
-                showErr(res.msg);
-            }
+            } else showErr(res.msg);
         });
 
-        // === 聊天逻辑 (精简版) ===
-        
+        // --- 2. 聊天 & 图片逻辑 ---
         const messages = document.getElementById('messages');
         const input = document.getElementById('input');
-
-        document.getElementById('input-area').addEventListener('submit', function(e) {
+        
+        document.getElementById('input-area').addEventListener('submit', (e) => {
             e.preventDefault();
-            if (input.value) {
-                socket.emit('chat message', input.value);
+            if(input.value.trim()) {
+                socket.emit('chat message', { msg: input.value, type: 'text' });
+                socket.emit('stop typing');
                 input.value = '';
             }
         });
 
-        // 图片处理
+        // 图片上传
         document.getElementById('file-input').addEventListener('change', function() {
-            const file = this.files[0];
-            if(file) {
-                const reader = new FileReader();
-                reader.onload = (e) => socket.emit('chat message', { msg: e.target.result, type: 'image' });
-                reader.readAsDataURL(file);
-                this.value = '';
+            if(this.files[0]) sendImg(this.files[0]);
+            this.value = '';
+        });
+
+        // 图片粘贴
+        input.addEventListener('paste', (e) => {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            for(let item of items) {
+                if(item.kind === 'file' && item.type.startsWith('image/')) {
+                    sendImg(item.getAsFile());
+                }
             }
         });
 
+        function sendImg(file) {
+            if(file.size > 5*1024*1024) return alert("图片太大了(>5MB)");
+            const reader = new FileReader();
+            reader.onload = (e) => socket.emit('chat message', { msg: e.target.result, type: 'image' });
+            reader.readAsDataURL(file);
+        }
+
+        // --- 3. 消息渲染 ---
         socket.on('chat message', (data) => {
             const li = document.createElement('li');
-            li.className = `message-row ${data.user === myName ? 'right' : 'left'}`;
+            const isMe = data.user === myName;
+            li.className = `message-row ${isMe ? 'right' : 'left'}`;
+            const color = stringToColor(data.user);
             
-            let content = data.type === 'image' 
+            const content = data.type === 'image' 
                 ? `<img src="${data.text}" onclick="window.open(this.src)">` 
                 : data.text;
 
             li.innerHTML = `
-                <div style="display:flex; flex-direction:column; margin:0 10px;">
-                    <span style="font-size:0.7rem; color:#999; margin-bottom:2px;">${data.user}</span>
+                <div class="avatar" style="background:${color}">${data.user[0].toUpperCase()}</div>
+                <div class="bubble-container">
+                    <div class="bubble-meta">${!isMe ? data.user : ''} ${data.time}</div>
                     <div class="bubble">${content}</div>
                 </div>
             `;
             messages.appendChild(li);
+            requestAnimationFrame(() => messages.scrollTop = messages.scrollHeight);
+        });
+
+        socket.on('system', msg => {
+            const li = document.createElement('li');
+            li.className = 'system-message';
+            li.textContent = msg;
+            messages.appendChild(li);
             messages.scrollTop = messages.scrollHeight;
         });
+
+        // --- 4. 表情 & 日志 & 杂项 ---
+        const emojis = ["😀","😂","🤣","😍","🥰","😎","😭","😡","👍","👎","🎉","🔥","❤️","💩","👻","🐱","🐶","🙈"];
+        const picker = document.getElementById('emoji-picker');
+        emojis.forEach(e => {
+            const span = document.createElement('span');
+            span.className = 'emoji-item';
+            span.textContent = e;
+            span.onclick = () => { input.value += e; input.focus(); picker.classList.remove('show'); };
+            picker.appendChild(span);
+        });
         
-        socket.on('update user list', (users) => {
-            const ul = document.getElementById('user-list');
-            ul.innerHTML = users.map(u => `<li>${u}</li>`).join('');
+        function toggleEmoji() { picker.classList.toggle('show'); }
+        function toggleLog() { 
+            const m = document.getElementById('modal-overlay');
+            m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+        }
+        function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+        
+        function renderLogs() {
+            const c = document.getElementById('log-content');
+            c.innerHTML = logs.map(l => `
+                <div class="log-entry">
+                    <div class="log-ver"><span>${l.v}</span><span class="log-date">${l.d}</span></div>
+                    <ul class="log-list">${l.i.map(i=>`<li>${i}</li>`).join('')}</ul>
+                </div>
+            `).join('');
+        }
+
+        function stringToColor(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+            let c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
+            return '#' + "00000".substring(0, 6 - c.length) + c;
+        }
+
+        socket.on('update user list', users => {
+            document.getElementById('user-list').innerHTML = users.map(u => 
+                `<li class="user-item"><div class="user-avatar-sm" style="background:${stringToColor(u)}">${u[0].toUpperCase()}</div>${u}</li>`
+            ).join('');
+        });
+
+        // 输入监听
+        let typingTimer;
+        input.addEventListener('input', () => {
+            socket.emit('typing');
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(() => socket.emit('stop typing'), 1000);
+        });
+        socket.on('typing', u => { 
+            const bar = document.getElementById('typing-bar');
+            bar.textContent = `${u} 正在输入...`; bar.style.opacity = 1;
+        });
+        socket.on('stop typing', () => document.getElementById('typing-bar').style.opacity = 0);
+        
+        // 点击空白处关闭表情
+        document.addEventListener('click', e => {
+            if(!e.target.closest('#emoji-picker') && !e.target.closest('.tool-btn')) picker.classList.remove('show');
         });
     </script>
 </body>
