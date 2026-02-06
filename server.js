@@ -127,3 +127,15 @@ setInterval(() => {
     // const myUrl = 'https://xxxx.onrender.com';
     // https.get(myUrl).on('error', ()=>{});
 }, 14 * 60 * 1000);
+/* --- 服务器性能监控 --- */
+setInterval(() => {
+    const memoryUsage = process.memoryUsage();
+    const ramUsed = Math.round(memoryUsage.rss / 1024 / 1024); 
+    const connections = Object.keys(onlineUsers).length; 
+
+    console.log(`[系统监控] 内存占用: ${ramUsed} MB | 在线用户: ${connections}`);
+    
+    if (ramUsed > 400) {
+        console.warn("⚠️⚠️⚠️ 警告：内存即将耗尽！服务器可能即将崩溃！");
+    }
+}, 1000); // <--- 这里已改为 1000 (每秒刷新)
