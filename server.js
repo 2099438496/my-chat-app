@@ -3,16 +3,21 @@ const app = express();
 const http = require('http');
 const server = http.createServer(app);
 const { Server } = require("socket.io");
-const io = new Server(server);
+// 修改点 1：允许最大 10MB 的数据包（用于发图片）
+const io = new Server(server, {
+  maxHttpBufferSize: 1e7 
+});
 const sqlite3 = require('sqlite3').verbose();
 
 // --- 数据库初始化 ---
-// 创建或打开一个名为 chat.db 的本地文件数据库
 const db = new sqlite3.Database('chat.db');
-
-// 只有当表不存在时才创建表（防止重复创建）
 db.serialize(() => {
-  db.run("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT, content TEXT, time TEXT)");
+  // 我们增加了一个 type 字段来区分是 'text' 还是 'image'
+  // 为了兼容老数据，如果列不存在可能会报错，所以这里用简单的容错写法
+  db.run("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT, content TEXT, time TEXT, type TEXT)");
+  
+  // 尝试给旧表添加 type 列（如果已经存在会忽略错误）
+  db.run("ALTER TABLE messages ADD COLUMN type TEXT", (err) => {});
 });
 
 app.get('/', (req, res) => {
@@ -23,54 +28,48 @@ const users = {};
 
 io.on('connection', (socket) => {
   
-  // 1. 用户加入
   socket.on('join', (name) => {
     users[socket.id] = name;
     io.emit('system', `${name} 加入了聊天室`);
     io.emit('update user list', Object.values(users));
 
-    // --- 关键代码：加载历史消息 ---
-    // 从数据库查询最近的 50 条消息
-    db.all("SELECT user, content, time FROM messages ORDER BY id ASC LIMIT 50", (err, rows) => {
+    // 加载历史消息
+    db.all("SELECT user, content, time, type FROM messages ORDER BY id ASC LIMIT 50", (err, rows) => {
       if (err) return;
-      
-      // 循环每一条历史记录，只发给当前连进来的这个用户 (socket.emit)
-      // 我们伪造成 'chat message' 事件，这样前端代码完全不用改就能显示历史记录！
       rows.forEach((row) => {
         socket.emit('chat message', { 
             user: row.user, 
             text: row.content, 
+            type: row.type || 'text', // 兼容老数据
             time: row.time,
-            id: 'history' // 标记为历史消息，避免前端判断气泡左右时出错
+            id: 'history' 
         });
       });
-      
-      // 发一条系统提示，告诉用户这是历史记录
       socket.emit('system', '--- 以上是历史消息 ---');
     });
   });
 
-  // 2. 收到消息
-  socket.on('chat message', (msg) => {
+  // 接收消息 (支持文本和图片)
+  socket.on('chat message', (data) => {
+    // data 结构: { msg: '...', type: 'text'/'image' }
     const name = users[socket.id] || '匿名';
     const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const msgContent = typeof data === 'string' ? data : data.msg; // 兼容旧代码
+    const msgType = data.type || 'text';
 
-    // --- 关键代码：存入数据库 ---
-    // 使用占位符 (?) 防止 SQL 注入攻击
-    const stmt = db.prepare("INSERT INTO messages (user, content, time) VALUES (?, ?, ?)");
-    stmt.run(name, msg, time);
+    const stmt = db.prepare("INSERT INTO messages (user, content, time, type) VALUES (?, ?, ?, ?)");
+    stmt.run(name, msgContent, time, msgType);
     stmt.finalize();
 
-    // 广播给所有人
     io.emit('chat message', { 
       user: name, 
-      text: msg, 
+      text: msgContent, 
+      type: msgType,
       id: socket.id,
       time: time 
     });
   });
 
-  // 3. 正在输入
   socket.on('typing', () => {
     const name = users[socket.id];
     socket.broadcast.emit('typing', name);
@@ -80,7 +79,6 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('stop typing');
   });
 
-  // 4. 断开连接
   socket.on('disconnect', () => {
     const name = users[socket.id];
     if (name) {
@@ -91,29 +89,14 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 3000; // 如果云端有分配端口就用云端的，没有就用3000
-server.listen(PORT, () => {
-  console.log(`服务器运行在端口 ${PORT}`);
-});
-// ... 前面的代码保持不变 ...
-
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`服务器运行在端口 ${PORT}`);
 });
 
-/* --- 新增：24小时防休眠代码 --- */
+/* --- 24小时防休眠 (请替换为你自己的 Render 网址) --- */
 const https = require('https');
-
-// 每 14 分钟 (1000 * 60 * 14) 发送一次请求
 setInterval(() => {
-  // ⚠️⚠️⚠️ 注意：请把下面的网址换成你刚才生成的 Render 真实网址 ⚠️⚠️⚠️
-  const myUrl = 'https://你自己的项目名字.onrender.com'; 
-  
-  https.get(myUrl, (res) => {
-    // 只是为了在日志里确认一下
-    console.log(`防休眠请求已发送: ${res.statusCode}`);
-  }).on('error', (e) => {
-    console.error(`防休眠请求失败: ${e.message}`);
-  });
-
+    // const myUrl = 'https://你的项目名.onrender.com'; 
+    // https.get(myUrl, (res) => console.log('Keep-alive:', res.statusCode)).on('error', (e) => {});
 }, 14 * 60 * 1000);
