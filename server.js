@@ -3,13 +3,15 @@ const app = express();
 const http = require('http');
 const server = http.createServer(app);
 const { Server } = require("socket.io");
-const io = new Server(server, { maxHttpBufferSize: 5e7 }); // 50MB 限制
+const io = new Server(server, { maxHttpBufferSize: 5e7 });
 const sqlite3 = require('sqlite3').verbose();
 const bcrypt = require('bcryptjs');
 
+// 初始化数据库
 const db = new sqlite3.Database('chat.db');
 
 db.serialize(() => {
+    // 强制 username 为主键 (PRIMARY KEY)，确保唯一性
     db.run("CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)");
     db.run("CREATE TABLE IF NOT EXISTS messages (id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT, content TEXT, time TEXT, type TEXT)");
 });
@@ -20,46 +22,68 @@ const onlineUsers = {};
 
 io.on('connection', (socket) => {
     
-    // --- 注册 ---
+    // --- 注册逻辑 (修复版) ---
     socket.on('register', (data) => {
         const { username, password } = data;
-        db.get("SELECT * FROM users WHERE username = ?", [username], (err, row) => {
-            if (row) {
-                socket.emit('register_response', { success: false, msg: '用户名已存在' });
+        
+        // 1. 先检查是否为空
+        if (!username || !password) {
+            return socket.emit('register_response', { success: false, msg: '账号密码不能为空' });
+        }
+
+        // 2. 尝试插入数据库
+        const hash = bcrypt.hashSync(password, 10);
+        const stmt = db.prepare("INSERT INTO users (username, password) VALUES (?, ?)");
+        
+        stmt.run(username, hash, function(err) {
+            if (err) {
+                // 如果报错包含 UNIQUE constraint，说明用户名已存在
+                if (err.message.includes('UNIQUE')) {
+                    socket.emit('register_response', { success: false, msg: '该用户名已被占用，请换一个' });
+                } else {
+                    socket.emit('register_response', { success: false, msg: '注册失败，服务器内部错误' });
+                }
             } else {
-                const hash = bcrypt.hashSync(password, 10);
-                const stmt = db.prepare("INSERT INTO users VALUES (?, ?)");
-                stmt.run(username, hash, (err) => {
-                    if (err) socket.emit('register_response', { success: false, msg: '注册失败' });
-                    else socket.emit('register_response', { success: true, msg: '注册成功' });
-                });
-                stmt.finalize();
+                socket.emit('register_response', { success: true, msg: '注册成功！请登录' });
             }
         });
+        stmt.finalize();
     });
 
-    // --- 登录 ---
+    // --- 登录逻辑 (修复版) ---
     socket.on('login', (data) => {
         const { username, password } = data;
+        
         db.get("SELECT * FROM users WHERE username = ?", [username], (err, row) => {
-            if (!row || !bcrypt.compareSync(password, row.password)) {
-                socket.emit('login_response', { success: false, msg: '账号或密码错误' });
-            } else {
-                onlineUsers[socket.id] = username;
-                socket.emit('login_response', { success: true, username: username });
-                
-                io.emit('system', `${username} 上线了`);
-                io.emit('update user list', Object.values(onlineUsers));
-
-                // 加载历史消息
-                db.all("SELECT user, content, time, type FROM messages ORDER BY id ASC LIMIT 50", (err, rows) => {
-                    if (rows) rows.forEach(r => socket.emit('chat message', { user: r.user, text: r.content, type: r.type || 'text', time: r.time }));
-                });
+            if (err) {
+                return socket.emit('login_response', { success: false, msg: '数据库查询错误' });
             }
+            
+            // 🌟 关键修复：区分账号不存在和密码错误
+            if (!row) {
+                // 找不到用户 -> 说明可能是 Render 重启导致数据丢失，或者是新用户
+                return socket.emit('login_response', { success: false, msg: '账号不存在 (可能已被重置)，请重新注册' });
+            }
+            
+            if (!bcrypt.compareSync(password, row.password)) {
+                return socket.emit('login_response', { success: false, msg: '密码错误' });
+            }
+
+            // 登录成功
+            onlineUsers[socket.id] = username;
+            socket.emit('login_response', { success: true, username: username });
+            
+            io.emit('system', `${username} 上线了`);
+            io.emit('update user list', Object.values(onlineUsers));
+
+            // 加载历史消息
+            db.all("SELECT user, content, time, type FROM messages ORDER BY id ASC LIMIT 50", (err, rows) => {
+                if (rows) rows.forEach(r => socket.emit('chat message', { user: r.user, text: r.content, type: r.type || 'text', time: r.time }));
+            });
         });
     });
 
-    // --- 核心：消息处理 (含指令逻辑) ---
+    // --- 消息处理 ---
     socket.on('chat message', (data) => {
         const name = onlineUsers[socket.id];
         if (!name) return;
@@ -68,13 +92,12 @@ io.on('connection', (socket) => {
         const msgContent = typeof data === 'string' ? data : data.msg;
         const msgType = data.type || 'text';
 
-        // 🌟 新增：检查是否是指令 (只处理文本类型)
+        // 指令处理
         if (msgType === 'text' && msgContent.startsWith('/')) {
             handleCommand(socket, name, msgContent);
-            return; // 是指令就不入库，也不作为普通消息转发
+            return;
         }
 
-        // 普通消息：存库并广播
         const stmt = db.prepare("INSERT INTO messages (user, content, time, type) VALUES (?, ?, ?, ?)");
         stmt.run(name, msgContent, time, msgType);
         stmt.finalize();
@@ -82,29 +105,12 @@ io.on('connection', (socket) => {
         io.emit('chat message', { user: name, text: msgContent, type: msgType, id: socket.id, time: time });
     });
 
-    // --- 🌟 魔法指令处理函数 ---
     function handleCommand(socket, user, cmd) {
         let resultMsg = "";
-        
-        if (cmd === '/roll') {
-            const num = Math.floor(Math.random() * 100) + 1;
-            resultMsg = `🎲 ${user} 掷出了骰子：【 ${num} 点 】`;
-        } 
-        else if (cmd === '/coin') {
-            const side = Math.random() > 0.5 ? "正面" : "反面";
-            resultMsg = `🪙 ${user} 抛出了硬币：【 ${side} 】`;
-        }
-        else if (cmd === '/help') {
-            // 只有自己能看到帮助
-            socket.emit('system', '可用指令: /roll (掷骰子), /coin (抛硬币)');
-            return;
-        } 
-        else {
-            socket.emit('system', '❌ 未知指令，输入 /help 查看帮助');
-            return;
-        }
-
-        // 广播游戏结果 (不存数据库，属于临时互动)
+        if (cmd === '/roll') resultMsg = `🎲 ${user} 掷出了：${Math.floor(Math.random()*100)+1} 点`;
+        else if (cmd === '/coin') resultMsg = `🪙 ${user} 抛出了：${Math.random()>0.5?"正面":"反面"}`;
+        else if (cmd === '/help') { socket.emit('system', '指令: /roll, /coin'); return; }
+        else { socket.emit('system', '❌ 未知指令'); return; }
         io.emit('system', resultMsg);
     }
 
@@ -119,14 +125,4 @@ io.on('connection', (socket) => {
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => { console.log(`服务器运行在端口 ${PORT}`); });
-
-// 防休眠监控 (30秒一次)
-const https = require('https');
-setInterval(() => {
-    const memoryUsage = process.memoryUsage();
-    // 只有在有人在线时才打印日志，避免日志太乱
-    if(Object.keys(onlineUsers).length > 0) {
-        console.log(`[监控] RAM: ${Math.round(memoryUsage.rss / 1024 / 1024)}MB | 在线: ${Object.keys(onlineUsers).length}`);
-    }
-}, 30000);
+server.listen(PORT, () => { console.log(`Server running on port ${PORT}`); });
